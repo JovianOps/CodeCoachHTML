@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CodeCoach</title>
+    <style>
+        body { margin:0; padding:0; font-family: 'Segoe UI', sans-serif; background:#1a1a2e; color:#eee; }
+        .app { display:flex; height:100vh; }
+        .sidebar { width:280px; background:#16213e; padding:16px; overflow-y:auto; }
+        .sidebar h1 { color:#00d4ff; font-size:18px; margin:0 0 16px 0; }
+        .problem-list { list-style:none; padding:0; margin:0; }
+        .problem-list li { padding:10px; margin:4px 0; background:#0f3460; border-radius:6px; cursor:pointer; border-left:3px solid transparent; }
+        .problem-list li:hover { background:#1a4c7f; }
+        .problem-list li.active { background:#1a4c7f; border-left-color:#00d4ff; }
+        .problem-list li .title { font-size:13px; font-weight:600; }
+        .problem-list li .difficulty { font-size:11px; color:#888; margin-top:2px; }
+        .editor-pane { flex:1; display:flex; flex-direction:column; }
+        .editor-header { background:#16213e; padding:8px 16px; display:flex; gap:8px; align-items:center; }
+        .editor-header button { background:#0f3460; color:#00d4ff; border:none; padding:6px 12px; border-radius:4px; cursor:pointer; }
+        .editor-header button:hover { background:#1a4c7f; }
+        .editor-header span { margin-left:auto; font-size:14px; color:#888; }
+        #editor { flex:1; width:100%; min-height:0; }
+        .output { height:120px; background:#0d1117; color:#00ff88; font-family:monospace; font-size:13px; padding:8px; overflow-y:auto; border-top:1px solid #333; }
+        .test-pass { color:#00ff88; }
+        .test-fail { color:#ff4444; }
+        .problem-desc { font-size:12px; color:#888; margin-bottom:8px; }
+        .difficulty-easy { color:#00ff88; }
+        .difficulty-medium { color:#ffaa00; }
+        .difficulty-hard { color:#ff4444; }
+    </style>
+</head>
+<body>
+<div class="app">
+    <div class="sidebar">
+        <h1>CodeCoach</h1>
+        <ul class="problem-list" id="problemList">
+            <li class="active" data-file="hello-world.json">
+                <div class="title">Hello World</div>
+                <div class="difficulty difficulty-easy">Easy</div>
+            </li>
+            <li data-file="count-vowels.json">
+                <div class="title">Count Vowels</div>
+                <div class="difficulty difficulty-medium">Medium</div>
+            </li>
+            <li data-file="fibonacci.json">
+                <div class="title">Fibonacci Sequence</div>
+                <div class="difficulty difficulty-hard">Hard</div>
+            </li>
+        </ul>
+    </div>
+    <div class="editor-pane">
+        <div class="editor-header">
+            <button onclick="runCode()">Run Tests</button>
+            <button onclick="resetCode()">Reset</button>
+            <span id="problemTitle">Hello World</span>
+        </div>
+        <div id="editor"></div>
+        <div class="output" id="output"></div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs/loader.js"></script>
+<script>
+const problems = {
+    'hello-world.json': {
+        title: 'Hello World',
+        difficulty: 'easy',
+        description: 'Print "Hello World!" to the console.',
+        starter: 'console.log("Hello World!");',
+        tests: [{ type: 'log', expected: "Hello World!" }]
+    },
+    'count-vowels.json': {
+        title: 'Count Vowels',
+        difficulty: 'medium',
+        description: 'Count the number of vowels in a given string.',
+        starter: 'function countVowels(str) {\n    return str.replace(/[^aeiou]/gi, "").length;\n}',
+        tests: [
+            { fn: 'countVowels("hello")', expected: 2 },
+            { fn: 'countVowels("AEIOU")', expected: 5 },
+            { fn: 'countVowels("xyz")', expected: 0 }
+        ]
+    },
+    'fibonacci.json': {
+        title: 'Fibonacci Sequence',
+        difficulty: 'hard',
+        description: 'Generate the first n numbers of the Fibonacci sequence.',
+        starter: 'function fibonacci(n) {\n    if (n === 1) return [0];\n    const seq = [0, 1];\n    for (let i = 2; i < n; i++) seq.push(seq[i-1] + seq[i-2]);\n    return seq;\n}',
+        tests: [
+            { fn: 'JSON.stringify(fibonacci(1))', expected: '[0]' },
+            { fn: 'JSON.stringify(fibonacci(5))', expected: '[0,1,1,2,3]' },
+            { fn: 'fibonacci(10)[9]', expected: 34 }
+        ]
+    }
+};
+
+let currentProblem = 'hello-world.json';
+let editor;
+
+require.config({ paths: { 'vs': 'https://cdn.jsdelivr.net/npm/monaco-editor@0.47.0/min/vs' }});
+require(['vs/editor/editor.main'], function() {
+    editor = monaco.editor.create(document.getElementById('editor'), {
+        value: problems[currentProblem].starter,
+        language: 'javascript',
+        theme: 'vs-dark',
+        automaticLayout: true
+    });
+});
+
+document.querySelectorAll('.problem-list li').forEach(item => {
+    item.addEventListener('click', () => {
+        document.querySelectorAll('.problem-list li').forEach(i => i.classList.remove('active'));
+        item.classList.add('active');
+        currentProblem = item.dataset.file;
+        const p = problems[currentProblem];
+        document.getElementById('problemTitle').textContent = p.title;
+        if (editor) editor.setValue(p.starter);
+        document.getElementById('output').innerHTML = '';
+    });
+});
+
+function runCode() {
+    const output = document.getElementById('output');
+    if (!editor) { output.innerHTML = '<div class="test-fail">Editor not loaded</div>'; return; }
+
+    const code = editor.getValue();
+    const p = problems[currentProblem];
+    const logs = [];
+    const origLog = console.log;
+    console.log = (...args) => { logs.push(args.join(' ')); };
+
+    let results = '<div class="problem-desc">' + p.description + '</div>';
+
+    try {
+        eval(code);
+
+        p.tests.forEach(test => {
+            try {
+                if (test.type === 'log') {
+                    if (logs.includes(test.expected)) {
+                        results += '<div class="test-pass">✓ Output: "' + test.expected + '"</div>';
+                    } else {
+                        results += '<div class="test-fail">✗ Output should be "' + test.expected + '"</div>';
+                    }
+                } else {
+                    const result = eval(test.fn);
+                    const expected = test.expected;
+                    const pass = result === expected || JSON.stringify(result) === JSON.stringify(expected);
+                    if (pass) {
+                        results += '<div class="test-pass">✓ ' + test.fn + ' === ' + expected + '</div>';
+                    } else {
+                        results += '<div class="test-fail">✗ ' + test.fn + ' === ' + result + ' (expected ' + expected + ')</div>';
+                    }
+                }
+            } catch(e) {
+                results += '<div class="test-fail">✗ ' + (test.type === 'log' ? test.expected : test.fn) + ' → ' + e.message + '</div>';
+            }
+        });
+    } catch(e) {
+        results += '<div class="test-fail">✗ Error: ' + e.message + '</div>';
+    }
+
+    console.log = origLog;
+    if (logs.length) {
+        results += '<div style="color:#888;margin-top:8px;">Console:</div>';
+        logs.forEach(l => results += '<div style="color:#888;">' + l + '</div>');
+    }
+    output.innerHTML = results;
+}
+
+function resetCode() {
+    if (editor) editor.setValue(problems[currentProblem].starter);
+    document.getElementById('output').innerHTML = '';
+}
+</script>
+</body>
+</html>
